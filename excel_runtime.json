@@ -1,0 +1,4 @@
+{
+  "builder": "build_excel.mjs",
+  "node": "node"
+}
