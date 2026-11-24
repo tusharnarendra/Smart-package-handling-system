@@ -82,6 +82,7 @@ char fileName[13] = "";
 
 bool sdReady = false;
 bool recording = false;
+bool arrivalMarked = false;
 
 unsigned long recordStartedAt = 0;
 int lightBaseline = 0;
@@ -315,6 +316,7 @@ bool startRecording() {
 
   // Recalibrate tilt baseline and reset counters
   initializeSensors();
+  arrivalMarked = false;
   lightBaseline = readLightADC();
   baselineValid = true;
 
@@ -613,6 +615,8 @@ void printStatus(Stream &port) {
 
   port.print(F("WALL2 COUNT: "));
   port.println(wall2Count);
+  port.print(F("ARRIVED: "));
+  port.println(arrivalMarked ? 1 : 0);
   port.println(F("CDS CALIBRATED: 0"));
   port.println(F("END_STATUS"));
 }
@@ -696,6 +700,22 @@ void handleCommand(
     sendLog(port, requested);
   }
 
+  else if (strcmp(command, "ARRIVED") == 0) {
+
+    if (!recording) {
+      port.println(F("ERROR: NOT RECORDING"));
+    }
+    else if (arrivalMarked) {
+      port.println(F("ALREADY ARRIVED"));
+    }
+    else {
+      arrivalMarked = true;
+      logRow("ARRIVED");
+      logFile.flush();
+      port.println(F("ARRIVAL MARKED"));
+    }
+  }
+
   else if (strcmp(command, "HELP") == 0) {
 
     port.println(F("STATUS"));
@@ -705,6 +725,7 @@ void handleCommand(
     port.println(F("LIST"));
     port.println(F("GET_LOG"));
     port.println(F("GET_LOG RUN00.CSV"));
+    port.println(F("ARRIVED"));
   }
 
   else {

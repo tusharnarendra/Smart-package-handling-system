@@ -157,6 +157,19 @@ class Receiver:
         self.passive_stopped, self.passive_at = False, None
         return filename
 
+    def mark_arrival(self):
+        self.send('ARRIVED')
+        deadline = time.monotonic() + self.command_timeout
+        while time.monotonic() < deadline:
+            self.check()
+            raw = self.reader.poll()
+            if raw is None: continue
+            line = raw.decode('ascii', errors='replace').strip()
+            self.emit(line)
+            if line.startswith('ERROR:'): raise ProtocolError(line)
+            if line in ('ARRIVAL MARKED', 'ALREADY ARRIVED'): return line
+        raise ProtocolError('ARRIVED not confirmed / 도착 표시 응답 없음')
+
     def list_files(self):
         self.send('LIST')
         deadline = time.monotonic() + self.command_timeout

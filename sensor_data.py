@@ -21,6 +21,7 @@ EHEAD = ['Experiment elapsed (s)', 'Experiment elapsed (HH:MM:SS.mmm)', 'Event',
 NUMERIC_COLUMNS = [5, 6, 7, 12, 14, 16, 18, 20, 22, 23]
 EVENT_NAMES = {
     'START': ('기록 시작', 'Recording started'), 'END': ('기록 종료', 'Recording ended'),
+    'ARRIVED': ('도착 표시', 'Arrival marked'),
     'SNAPSHOT': ('정기 상태 기록', 'Periodic snapshot'),
     'REED16_OPEN': ('뚜껑 1 자석 미감지', 'Lid 1 magnet not detected'), 'REED16_CLOSED': ('뚜껑 1 자석 감지', 'Lid 1 magnet detected'),
     'REED09_OPEN': ('뚜껑 2 자석 미감지', 'Lid 2 magnet not detected'), 'REED09_CLOSED': ('뚜껑 2 자석 감지', 'Lid 2 magnet detected'),
