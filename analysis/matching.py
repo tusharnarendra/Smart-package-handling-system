@@ -6,13 +6,18 @@ Answers three key questions:
 - how accurate was the timing (how many ms early or late was detection)
 """
 
+
 import csv
 from dataclasses import dataclass, field
 
 
 DEFAULT_TOLERANCE_MS = {
-    "LID_OPEN": 1500, "TILT": 1500, "SHOCK": 1000,
-    "WALL1": 1000, "WALL2": 1000, "LIGHT_LEAK": 2000,
+    "LID_OPEN": 1500,
+    "TILT": 1500,
+    "SHOCK": 1000,
+    "WALL1": 1000,
+    "WALL2": 1000,
+    "LIGHT_LEAK": 2000,
 }
 
 
@@ -31,54 +36,101 @@ class Match:
 
 @dataclass
 class MatchResult:
-    matches: list                 # true positives
-    false_negatives: list         # labels with no event
-    false_positives: list         # events with no label
-    ignored: list = field(default_factory=list)  # events skipped (setup artifacts)
+    matches: list
+    false_negatives: list
+    false_positives: list
+    ignored: list = field(default_factory=list)
 
 
 def load_labels(path):
+    """Read and validate labels from a CSV file."""
     labels = []
-    with open(path, newline="", encoding="utf-8-sig") as f:
-        for n, row in enumerate(csv.DictReader(f), 2):
-            t = row["type"].strip().upper()
-            if t not in DEFAULT_TOLERANCE_MS:
-                raise ValueError(f"{path} line {n}: unknown label type {t!r}")
+
+    with open(path, newline="", encoding="utf-8-sig") as file:
+        reader = csv.DictReader(file)
+
+        for line, row in enumerate(reader, start=2):
+            event_type = row["type"].strip().upper()
+
+            if event_type not in DEFAULT_TOLERANCE_MS:
+                raise ValueError(f"Line {line}: unknown type {event_type}")
+
             try:
-                labels.append(Label(t, int(row["t_ms"])))
+                time = int(row["t_ms"])
             except ValueError:
-                raise ValueError(f"{path} line {n}: t_ms must be an integer")
-    return sorted(labels, key=lambda l: l.t_ms)
+                raise ValueError(f"Line {line}: t_ms must be an integer")
+
+            labels.append(Label(event_type, time))
+
+    return sorted(labels, key=lambda label: label.t_ms)
 
 
 def match_events(events, labels, tolerance=None, skip_start_artifacts=True):
-    tol = {**DEFAULT_TOLERANCE_MS, **(tolerance or {})}
+    """Match detected events with reference labels."""
+
+    # Set matching tolerances
+    tol = DEFAULT_TOLERANCE_MS.copy()
+    if tolerance:
+        tol.update(tolerance)
+
+    # Remove events caused by initial setup
     ignored = []
+
     if skip_start_artifacts:
-        # e.g. lid already open in the START row: a setup problem, not a detection
         ignored = [e for e in events if e.started_at_start]
         events = [e for e in events if not e.started_at_start]
 
+    # Find all possible matches
     pairs = []
-    for i, lab in enumerate(labels):
-        for j, ev in enumerate(events):
-            if ev.type == lab.type:
-                d = abs(ev.start_ms - lab.t_ms)
-                if d <= tol[lab.type]:
-                    pairs.append((d, i, j))
+
+    for i, label in enumerate(labels):
+        for j, event in enumerate(events):
+
+            if event.type != label.type:
+                continue
+
+            difference = abs(event.start_ms - label.t_ms)
+
+            if difference <= tol[label.type]:
+                pairs.append((difference, i, j))
+
+    # Prefer matches with the smallest time difference
     pairs.sort()
 
-    used_l, used_e, matches = set(), set(), []
-    for d, i, j in pairs:
-        if i in used_l or j in used_e:
+    used_labels = set()
+    used_events = set()
+    matches = []
+
+    for difference, i, j in pairs:
+
+        if i in used_labels or j in used_events:
             continue
-        used_l.add(i)
-        used_e.add(j)
-        matches.append(Match(labels[i], events[j], events[j].start_ms - labels[i].t_ms))
+
+        used_labels.add(i)
+        used_events.add(j)
+
+        latency = events[j].start_ms - labels[i].t_ms
+
+        matches.append(
+            Match(labels[i], events[j], latency)
+        )
+
+    # Identify unmatched labels and events
+    false_negatives = [
+        label for i, label in enumerate(labels)
+        if i not in used_labels
+    ]
+
+    false_positives = [
+        event for j, event in enumerate(events)
+        if j not in used_events
+    ]
+
+    matches.sort(key=lambda match: match.label.t_ms)
 
     return MatchResult(
-        sorted(matches, key=lambda m: m.label.t_ms),
-        [l for i, l in enumerate(labels) if i not in used_l],
-        [e for j, e in enumerate(events) if j not in used_e],
-        ignored,
+        matches=matches,
+        false_negatives=false_negatives,
+        false_positives=false_positives,
+        ignored=ignored
     )
